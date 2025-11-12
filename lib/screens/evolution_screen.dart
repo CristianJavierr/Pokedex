@@ -131,7 +131,7 @@ class _EvolutionScreenState extends State<EvolutionScreen> {
     final formName = formData['form_name'] as String;
 
     return GestureDetector(
-      onTap: () => _navigateToPokemon(id),
+      onTap: () => _navigateToPokemonByName(name),
       child: Container(
         width: 140,
         padding: const EdgeInsets.all(15),
@@ -307,6 +307,80 @@ class _EvolutionScreenState extends State<EvolutionScreen> {
                 builder: (context) => PokemonDetailScreen(pokemon: pokemon),
               ),
               (route) => route.isFirst, // Keep only the home screen
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading Pokemon: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _navigateToPokemonByName(String pokemonName) async {
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(color: Colors.white),
+      ),
+    );
+
+    try {
+      // Fetch Pokemon data by exact name
+      final QueryOptions options = QueryOptions(
+        document: gql(r'''
+          query GetPokemonByName($name: String!) {
+            pokemon_v2_pokemon(where: {name: {_eq: $name}}) {
+              id
+              name
+              height
+              weight
+              pokemon_v2_pokemontypes {
+                pokemon_v2_type {
+                  name
+                }
+              }
+              pokemon_v2_pokemonstats {
+                stat_id
+                base_stat
+              }
+            }
+          }
+        '''),
+        variables: {
+          'name': pokemonName,
+        },
+      );
+
+      final QueryResult result = await PokemonService.client.value.query(options);
+
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+
+        if (!result.hasException && result.data != null) {
+          final List<dynamic> pokemonList =
+              result.data?['pokemon_v2_pokemon'] ?? [];
+
+          if (pokemonList.isNotEmpty) {
+            final pokemon = Pokemon.fromJson(pokemonList[0]);
+            
+            // Navigate to detail screen and remove all previous routes
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(
+                builder: (context) => PokemonDetailScreen(pokemon: pokemon),
+              ),
+              (route) => route.isFirst, // Keep only the home screen
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Pokemon form not found')),
             );
           }
         }
