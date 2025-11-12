@@ -160,7 +160,7 @@ class _PokemonDetailScreenState extends State<PokemonDetailScreen>
             ),
             // Imagen del Pokémon en la división
             Positioned(
-              top: cardTop - 180,
+              top: cardTop - 165,
               left: 0,
               right: 0,
               child: _buildPokemonImage(),
@@ -386,8 +386,8 @@ class _PokemonDetailScreenState extends State<PokemonDetailScreen>
       child: Center(
         child: CachedNetworkImage(
           imageUrl: widget.pokemon.imageUrl,
-          height: 380,
-          width: 380,
+          height: 350,
+          width: 350,
           fit: BoxFit.contain,
           filterQuality: FilterQuality.none,
           placeholder: (context, url) => const Center(
