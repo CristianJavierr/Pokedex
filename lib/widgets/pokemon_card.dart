@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../models/pokemon.dart';
+import '../models/pokemon_dto.dart';
 import '../utils/colors.dart';
 
 class PokemonCard extends StatelessWidget {
-  final Pokemon pokemon;
+  final PokemonDTO pokemon;
   final VoidCallback? onTap;
+  final bool isFavorite;
 
   const PokemonCard({
     Key? key,
     required this.pokemon,
     this.onTap,
+    this.isFavorite = false,
   }) : super(key: key);
 
   @override
@@ -51,13 +53,27 @@ class PokemonCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  Text(
-                    pokemon.formattedId,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isFavorite)
+                        const Padding(
+                          padding: EdgeInsets.only(right: 4),
+                          child: Icon(
+                            Icons.favorite,
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                        ),
+                      Text(
+                        pokemon.formattedId,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

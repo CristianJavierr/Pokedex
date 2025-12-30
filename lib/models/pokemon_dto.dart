@@ -1,4 +1,4 @@
-class PokemonStats {
+class PokemonStatsDTO {
   final int hp;
   final int attack;
   final int defense;
@@ -6,7 +6,7 @@ class PokemonStats {
   final int specialDefense;
   final int speed;
 
-  PokemonStats({
+  PokemonStatsDTO({
     required this.hp,
     required this.attack,
     required this.defense,
@@ -16,7 +16,7 @@ class PokemonStats {
   });
 }
 
-class Pokemon {
+class PokemonDTO {
   final int id;
   final String name;
   final List<String> types;
@@ -24,9 +24,9 @@ class Pokemon {
   final String? description;
   final int height; // en decímetros
   final int weight; // en hectogramos
-  final PokemonStats? stats;
+  final PokemonStatsDTO? stats;
 
-  Pokemon({
+  PokemonDTO({
     required this.id,
     required this.name,
     required this.types,
@@ -37,15 +37,15 @@ class Pokemon {
     this.stats,
   });
 
-  factory Pokemon.fromJson(Map<String, dynamic> json) {
-    PokemonStats? stats;
+  factory PokemonDTO.fromJson(Map<String, dynamic> json) {
+    PokemonStatsDTO? stats;
     if (json['pokemon_v2_pokemonstats'] != null) {
       final statsList = json['pokemon_v2_pokemonstats'] as List;
       final statsMap = <int, int>{};
       for (var stat in statsList) {
         statsMap[stat['stat_id']] = stat['base_stat'];
       }
-      stats = PokemonStats(
+      stats = PokemonStatsDTO(
         hp: statsMap[1] ?? 0,
         attack: statsMap[2] ?? 0,
         defense: statsMap[3] ?? 0,
@@ -55,7 +55,7 @@ class Pokemon {
       );
     }
 
-    return Pokemon(
+    return PokemonDTO(
       id: json['id'],
       name: json['name'],
       types: (json['pokemon_v2_pokemontypes'] as List)

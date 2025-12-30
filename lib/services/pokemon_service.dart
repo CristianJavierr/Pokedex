@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
+import 'settings_service.dart';
+import '../models/pokemon_dto.dart';
 
 class PokemonService {
   static HttpLink httpLink = HttpLink(
@@ -13,9 +15,18 @@ class PokemonService {
     ),
   );
 
-  static const String getPokemonsQuery = r'''
+  // ============================================
+  // QUERIES (GraphQL strings)
+  // ============================================
+
+  static const String _pokemonsQuery = r'''
     query GetPokemons($limit: Int!, $offset: Int!) {
-      pokemon_v2_pokemon(limit: $limit, offset: $offset, order_by: {id: asc}) {
+      pokemon_v2_pokemon(
+        limit: $limit, 
+        offset: $offset, 
+        order_by: {id: asc},
+        where: {id: {_lte: 1025}, is_default: {_eq: true}}
+      ) {
         id
         name
         height
@@ -33,7 +44,7 @@ class PokemonService {
     }
   ''';
 
-  static const String searchPokemonQuery = r'''
+  static const String _searchPokemonQuery = r'''
     query SearchPokemon($name: String!) {
       pokemon_v2_pokemon(where: {name: {_ilike: $name}}, order_by: {id: asc}) {
         id
@@ -53,7 +64,142 @@ class PokemonService {
     }
   ''';
 
-  static String getFilteredPokemonsQuery(
+  // ============================================
+  // SERVICE METHODS (Return DTOs)
+  // ============================================
+
+  /// Fetch paginated list of Pokemon
+  static Future<List<PokemonDTO>> getPokemons({
+    required int limit,
+    required int offset,
+  }) async {
+    try {
+      final QueryOptions options = QueryOptions(
+        document: gql(_pokemonsQuery),
+        variables: {'limit': limit, 'offset': offset},
+        fetchPolicy: FetchPolicy.networkOnly,
+      );
+
+      final QueryResult result = await client.value.query(options);
+
+      if (result.hasException) {
+        print('Error fetching pokemons: ${result.exception}');
+        return [];
+      }
+
+      final List<dynamic> pokemonList = result.data?['pokemon_v2_pokemon'] ?? [];
+      return pokemonList.map((json) => PokemonDTO.fromJson(json)).toList();
+    } catch (e) {
+      print('Exception fetching pokemons: $e');
+      return [];
+    }
+  }
+
+  /// Search Pokemon by name
+  static Future<List<PokemonDTO>> searchPokemons(String searchQuery) async {
+    try {
+      final QueryOptions options = QueryOptions(
+        document: gql(_searchPokemonQuery),
+        variables: {'name': '%$searchQuery%'},
+        fetchPolicy: FetchPolicy.networkOnly,
+      );
+
+      final QueryResult result = await client.value.query(options);
+
+      if (result.hasException) {
+        print('Error searching pokemons: ${result.exception}');
+        return [];
+      }
+
+      final List<dynamic> pokemonList = result.data?['pokemon_v2_pokemon'] ?? [];
+      return pokemonList.map((json) => PokemonDTO.fromJson(json)).toList();
+    } catch (e) {
+      print('Exception searching pokemons: $e');
+      return [];
+    }
+  }
+
+  /// Get Pokemon by list of IDs (for favorites)
+  static Future<List<PokemonDTO>> getPokemonsByIds(List<int> ids) async {
+    if (ids.isEmpty) return [];
+    
+    try {
+      final idsString = ids.join(', ');
+      final query = '''
+        query GetPokemonsByIds {
+          pokemon_v2_pokemon(where: {id: {_in: [$idsString]}}, order_by: {id: asc}) {
+            id
+            name
+            height
+            weight
+            pokemon_v2_pokemontypes {
+              pokemon_v2_type {
+                name
+              }
+            }
+            pokemon_v2_pokemonstats {
+              stat_id
+              base_stat
+            }
+          }
+        }
+      ''';
+
+      final QueryOptions options = QueryOptions(
+        document: gql(query),
+        fetchPolicy: FetchPolicy.networkOnly,
+      );
+
+      final QueryResult result = await client.value.query(options);
+
+      if (result.hasException) {
+        print('Error fetching pokemons by ids: ${result.exception}');
+        return [];
+      }
+
+      final List<dynamic> pokemonList = result.data?['pokemon_v2_pokemon'] ?? [];
+      return pokemonList.map((json) => PokemonDTO.fromJson(json)).toList();
+    } catch (e) {
+      print('Exception fetching pokemons by ids: $e');
+      return [];
+    }
+  }
+
+  /// Get filtered Pokemon
+  static Future<List<PokemonDTO>> getFilteredPokemons({
+    required List<String> types,
+    required List<int> generations,
+    required double minHeight,
+    required double maxHeight,
+    required double minWeight,
+    required double maxWeight,
+  }) async {
+    try {
+      final query = _buildFilteredQuery(
+        types, generations, minHeight, maxHeight, minWeight, maxWeight,
+      );
+
+      final QueryOptions options = QueryOptions(
+        document: gql(query),
+        fetchPolicy: FetchPolicy.networkOnly,
+      );
+
+      final QueryResult result = await client.value.query(options);
+
+      if (result.hasException) {
+        print('Error fetching filtered pokemons: ${result.exception}');
+        return [];
+      }
+
+      final List<dynamic> pokemonList = result.data?['pokemon_v2_pokemon'] ?? [];
+      return pokemonList.map((json) => PokemonDTO.fromJson(json)).toList();
+    } catch (e) {
+      print('Exception fetching filtered pokemons: $e');
+      return [];
+    }
+  }
+
+  static String _buildFilteredQuery(
     List<String> types,
     List<int> generations,
     double minHeight,
@@ -61,7 +207,6 @@ class PokemonService {
     double minWeight,
     double maxWeight,
   ) {
-    String whereClause = '';
     List<String> conditions = [];
 
     // Type filter
@@ -102,9 +247,7 @@ class PokemonService {
       conditions.add('weight: {_gte: ${minWeight.round()}, _lte: ${maxWeight.round()}}');
     }
 
-    if (conditions.isNotEmpty) {
-      whereClause = 'where: {${conditions.join(', ')}}';
-    }
+    String whereClause = conditions.isNotEmpty ? 'where: {${conditions.join(', ')}}' : '';
 
     return '''
       query GetFilteredPokemons {
@@ -127,25 +270,88 @@ class PokemonService {
     ''';
   }
 
-  static const String getPokemonDescriptionQuery = r'''
-    query GetPokemonDescription($id: Int!) {
-      pokemon_v2_pokemonspecies(where: {id: {_eq: $id}}) {
-        pokemon_v2_pokemonspeciesflavortexts(
-          where: {language_id: {_eq: 9}}
-          order_by: {version_id: desc}
-          limit: 1
-        ) {
-          flavor_text
+  /// Get a single Pokemon by ID
+  static Future<PokemonDTO?> getPokemonById(int id) async {
+    try {
+      final pokemons = await getPokemonsByIds([id]);
+      return pokemons.isNotEmpty ? pokemons.first : null;
+    } catch (e) {
+      print('Exception fetching pokemon by id: $e');
+      return null;
+    }
+  }
+
+  /// Get a single Pokemon by exact name
+  static Future<PokemonDTO?> getPokemonByName(String name) async {
+    try {
+      final query = r'''
+        query GetPokemonByName($name: String!) {
+          pokemon_v2_pokemon(where: {name: {_eq: $name}}) {
+            id
+            name
+            height
+            weight
+            pokemon_v2_pokemontypes {
+              pokemon_v2_type {
+                name
+              }
+            }
+            pokemon_v2_pokemonstats {
+              stat_id
+              base_stat
+            }
+          }
+        }
+      ''';
+
+      final QueryOptions options = QueryOptions(
+        document: gql(query),
+        variables: {'name': name},
+        fetchPolicy: FetchPolicy.networkOnly,
+      );
+
+      final QueryResult result = await client.value.query(options);
+
+      if (result.hasException) {
+        print('Error fetching pokemon by name: ${result.exception}');
+        return null;
+      }
+
+      final List<dynamic> pokemonList = result.data?['pokemon_v2_pokemon'] ?? [];
+      return pokemonList.isNotEmpty ? PokemonDTO.fromJson(pokemonList.first) : null;
+    } catch (e) {
+      print('Exception fetching pokemon by name: $e');
+      return null;
+    }
+  }
+
+  // ============================================
+  // DESCRIPTION & OTHER QUERIES
+  // ============================================
+
+  static String getPokemonDescriptionQuery(int languageId) {
+    return '''
+      query GetPokemonDescription(\$id: Int!) {
+        pokemon_v2_pokemonspecies(where: {id: {_eq: \$id}}) {
+          pokemon_v2_pokemonspeciesflavortexts(
+            where: {language_id: {_eq: $languageId}}
+            order_by: {version_id: desc}
+            limit: 1
+          ) {
+            flavor_text
+          }
         }
       }
-    }
-  ''';
+    ''';
+  }
 
   static Future<String?> getPokemonDescription(int pokemonId) async {
     try {
+      final languageId = SettingsService.currentLanguageId;
       final QueryOptions options = QueryOptions(
-        document: gql(getPokemonDescriptionQuery),
+        document: gql(getPokemonDescriptionQuery(languageId)),
         variables: {'id': pokemonId},
+        fetchPolicy: FetchPolicy.networkOnly,
       );
 
       final QueryResult result = await client.value.query(options);
@@ -279,7 +485,18 @@ class PokemonService {
 
   static const String getPokemonMovesQuery = r'''
     query GetPokemonMoves($pokemonId: Int!) {
-      pokemon_v2_pokemonmove(where: {pokemon_id: {_eq: $pokemonId}}, limit: 50) {
+      pokemon_v2_pokemonmove(
+        where: {pokemon_id: {_eq: $pokemonId}},
+        order_by: {level: asc}
+      ) {
+        level
+        pokemon_v2_movelearnmethod {
+          name
+        }
+        pokemon_v2_versiongroup {
+          name
+          id
+        }
         pokemon_v2_move {
           id
           name
@@ -309,23 +526,156 @@ class PokemonService {
       if (!result.hasException && result.data != null) {
         final moves = result.data?['pokemon_v2_pokemonmove'] as List?;
         if (moves != null) {
-          return moves.map((moveData) {
+          // Use a Set to track unique moves (by move id + method + version)
+          Set<String> seenMoves = {};
+          List<Map<String, dynamic>> uniqueMoves = [];
+          
+          for (var moveData in moves) {
             final move = moveData['pokemon_v2_move'];
+            final moveId = move['id'];
+            final method = moveData['pokemon_v2_movelearnmethod']?['name'] as String? ?? 'unknown';
+            final versionGroupId = moveData['pokemon_v2_versiongroup']?['id'] ?? 0;
+            final level = moveData['level'] as int? ?? 0;
+            
+            // Create unique key
+            final key = '${moveId}_${method}_$versionGroupId';
+            
+            if (!seenMoves.contains(key)) {
+              seenMoves.add(key);
+              uniqueMoves.add({
+                'id': moveId,
+                'name': move['name'] as String,
+                'power': move['power'],
+                'pp': move['pp'],
+                'accuracy': move['accuracy'],
+                'type': move['pokemon_v2_type']?['name'] as String?,
+                'damageClass': move['pokemon_v2_movedamageclass']?['name'] as String?,
+                'level': level,
+                'method': method,
+                'versionGroup': moveData['pokemon_v2_versiongroup']?['name'] as String? ?? 'unknown',
+                'versionGroupId': versionGroupId,
+              });
+            }
+          }
+          return uniqueMoves;
+        }
+      }
+      return [];
+    } catch (e) {
+      print('Exception fetching moves: $e');
+      return [];
+    }
+  }
+
+  static const String getPokemonAbilitiesQuery = r'''
+    query GetPokemonAbilities($pokemonId: Int!) {
+      pokemon_v2_pokemonability(where: {pokemon_id: {_eq: $pokemonId}}) {
+        is_hidden
+        pokemon_v2_ability {
+          name
+          pokemon_v2_abilityeffecttexts(where: {language_id: {_eq: 9}}, limit: 1) {
+            short_effect
+          }
+        }
+      }
+    }
+  ''';
+
+  static Future<List<Map<String, dynamic>>> getPokemonAbilities(int pokemonId) async {
+    try {
+      final QueryOptions options = QueryOptions(
+        document: gql(getPokemonAbilitiesQuery),
+        variables: {'pokemonId': pokemonId},
+      );
+
+      final QueryResult result = await client.value.query(options);
+
+      if (!result.hasException && result.data != null) {
+        final abilities = result.data?['pokemon_v2_pokemonability'] as List?;
+        if (abilities != null) {
+          return abilities.map((abilityData) {
+            final ability = abilityData['pokemon_v2_ability'];
+            final effectTexts = ability['pokemon_v2_abilityeffecttexts'] as List?;
+            String shortEffect = 'No effect description available.';
+            
+            if (effectTexts != null && effectTexts.isNotEmpty) {
+              shortEffect = effectTexts[0]['short_effect'] as String? ?? shortEffect;
+              // Truncar a máximo 160 caracteres
+              if (shortEffect.length > 160) {
+                shortEffect = '${shortEffect.substring(0, 157)}...';
+              }
+            }
+            
             return {
-              'id': move['id'],
-              'name': move['name'] as String,
-              'power': move['power'],
-              'pp': move['pp'],
-              'accuracy': move['accuracy'],
-              'type': move['pokemon_v2_type']?['name'] as String?,
-              'damageClass': move['pokemon_v2_movedamageclass']?['name'] as String?,
+              'name': ability['name'] as String,
+              'isHidden': abilityData['is_hidden'] as bool,
+              'shortEffect': shortEffect,
             };
           }).toList();
         }
       }
       return [];
     } catch (e) {
-      print('Exception fetching moves: $e');
+      print('Exception fetching abilities: $e');
+      return [];
+    }
+  }
+
+  static const String getPokemonFormsQuery = r'''
+    query GetPokemonForms($speciesId: Int!) {
+      pokemon_v2_pokemon(where: {pokemon_species_id: {_eq: $speciesId}}, order_by: {id: asc}) {
+        id
+        name
+        is_default
+        pokemon_v2_pokemonforms {
+          form_name
+          name
+        }
+        pokemon_v2_pokemontypes {
+          pokemon_v2_type {
+            name
+          }
+        }
+      }
+    }
+  ''';
+
+  static Future<List<Map<String, dynamic>>> getPokemonForms(int speciesId) async {
+    try {
+      final QueryOptions options = QueryOptions(
+        document: gql(getPokemonFormsQuery),
+        variables: {'speciesId': speciesId},
+      );
+
+      final QueryResult result = await client.value.query(options);
+
+      if (!result.hasException && result.data != null) {
+        final pokemons = result.data?['pokemon_v2_pokemon'] as List?;
+        if (pokemons != null) {
+          return pokemons.map((pokemon) {
+            final forms = pokemon['pokemon_v2_pokemonforms'] as List?;
+            final types = (pokemon['pokemon_v2_pokemontypes'] as List?)
+                ?.map((t) => t['pokemon_v2_type']['name'] as String)
+                .toList() ?? [];
+            
+            String formName = '';
+            if (forms != null && forms.isNotEmpty) {
+              formName = forms[0]['form_name'] as String? ?? '';
+            }
+            
+            return {
+              'id': pokemon['id'] as int,
+              'name': pokemon['name'] as String,
+              'form_name': formName,
+              'is_default': pokemon['is_default'] as bool? ?? false,
+              'types': types,
+            };
+          }).toList();
+        }
+      }
+      return [];
+    } catch (e) {
+      print('Exception fetching forms: $e');
       return [];
     }
   }
@@ -339,6 +689,17 @@ class PokemonService {
             name
             order
             evolves_from_species_id
+            pokemon_v2_pokemonevolutions {
+              min_level
+              min_happiness
+              time_of_day
+              pokemon_v2_evolutiontrigger {
+                name
+              }
+              pokemon_v2_item {
+                name
+              }
+            }
             pokemon_v2_pokemons {
               id
               name
@@ -393,13 +754,61 @@ class PokemonService {
                 }
               }
               
+              // Extract evolution details
+              final evolutions = speciesData['pokemon_v2_pokemonevolutions'] as List?;
+              String triggerDescription = '';
+              
+              if (evolutions != null && evolutions.isNotEmpty) {
+                final evo = evolutions[0];
+                final minLevel = evo['min_level'] as int?;
+                final minHappiness = evo['min_happiness'] as int?;
+                final timeOfDay = evo['time_of_day'] as String?;
+                final triggerName = evo['pokemon_v2_evolutiontrigger']?['name'] as String?;
+                final itemName = evo['pokemon_v2_item']?['name'] as String?;
+                
+                if (triggerName != null) {
+                  switch (triggerName) {
+                    case 'level-up':
+                      if (minLevel != null) {
+                        triggerDescription = 'Level $minLevel';
+                      } else if (minHappiness != null) {
+                        triggerDescription = 'Friendship';
+                        if (timeOfDay != null && timeOfDay.isNotEmpty) {
+                          triggerDescription += ' (${timeOfDay == 'day' ? 'Day' : 'Night'})';
+                        }
+                      } else if (timeOfDay != null && timeOfDay.isNotEmpty) {
+                        triggerDescription = 'Level up (${timeOfDay == 'day' ? 'Day' : 'Night'})';
+                      } else {
+                        triggerDescription = 'Level up';
+                      }
+                      break;
+                    case 'trade':
+                      triggerDescription = 'Trade';
+                      if (itemName != null) {
+                        final formattedItem = itemName.split('-').map((w) => w[0].toUpperCase() + w.substring(1)).join(' ');
+                        triggerDescription += ' ($formattedItem)';
+                      }
+                      break;
+                    case 'use-item':
+                      if (itemName != null) {
+                        final formattedItem = itemName.split('-').map((w) => w[0].toUpperCase() + w.substring(1)).join(' ');
+                        triggerDescription = formattedItem;
+                      } else {
+                        triggerDescription = 'Use item';
+                      }
+                      break;
+                    default:
+                      triggerDescription = triggerName.split('-').map((w) => w[0].toUpperCase() + w.substring(1)).join(' ');
+                  }
+                }
+              }
+              
               return {
                 'id': speciesData['id'],
                 'name': speciesData['name'] as String,
                 'order': speciesData['order'],
                 'evolves_from': speciesData['evolves_from_species_id'],
-                'min_level': null,
-                'trigger': 'level-up',
+                'trigger': triggerDescription,
                 'forms': forms,
               };
             }).toList();

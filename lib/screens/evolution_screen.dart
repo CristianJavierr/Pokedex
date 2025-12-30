@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
-import '../models/pokemon.dart';
+import '../models/pokemon_dto.dart';
 import '../services/pokemon_service.dart';
 import '../utils/colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'detail_screen.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 
 class EvolutionScreen extends StatefulWidget {
-  final Pokemon pokemon;
+  final PokemonDTO pokemon;
 
   const EvolutionScreen({Key? key, required this.pokemon}) : super(key: key);
 
@@ -65,39 +64,256 @@ class _EvolutionScreenState extends State<EvolutionScreen> {
             )
           : _evolutionChain.isEmpty
               ? Center(
-                  child: Text(
-                    'No evolution data available',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                    ),
-                  ),
-                )
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      for (int i = 0; i < _evolutionChain.length; i++) ...[
-                        Center(child: _buildEvolutionStage(_evolutionChain[i])),
-                        if (i < _evolutionChain.length - 1)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 20),
-                            child: Icon(
-                              Icons.arrow_downward,
-                              color: Colors.white,
-                              size: 40,
-                            ),
-                          ),
-                        // Show forms after the last evolution
-                        if (i == _evolutionChain.length - 1 && 
-                            _evolutionChain[i]['forms'] != null &&
-                            (_evolutionChain[i]['forms'] as List).isNotEmpty)
-                          ..._buildFormsList(_evolutionChain[i]['forms'] as List),
-                      ],
+                      Icon(
+                        Icons.catching_pokemon,
+                        size: 80,
+                        color: Colors.white.withOpacity(0.5),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Does not evolve',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'This Pokémon has no evolution chain',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.7),
+                          fontSize: 14,
+                        ),
+                      ),
                     ],
                   ),
+                )
+              : _evolutionChain.length == 1
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.catching_pokemon,
+                            size: 80,
+                            color: Colors.white.withOpacity(0.5),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Does not evolve',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${widget.pokemon.capitalizedName} is a standalone Pokémon',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.7),
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: _buildEvolutionTree(),
+                    ),
+    );
+  }
+
+  Widget _buildEvolutionTree() {
+    // Group evolutions by their evolves_from_species_id
+    Map<int?, List<Map<String, dynamic>>> evolutionsByParent = {};
+    
+    for (var evo in _evolutionChain) {
+      final evolvesFrom = evo['evolves_from'] as int?;
+      if (!evolutionsByParent.containsKey(evolvesFrom)) {
+        evolutionsByParent[evolvesFrom] = [];
+      }
+      evolutionsByParent[evolvesFrom]!.add(evo);
+    }
+    
+    // Find the base Pokemon (evolves_from is null)
+    final basePokemon = _evolutionChain.firstWhere(
+      (evo) => evo['evolves_from'] == null,
+      orElse: () => _evolutionChain.first,
+    );
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: _buildEvolutionLevel(basePokemon, evolutionsByParent),
+    );
+  }
+
+  List<Widget> _buildEvolutionLevel(
+    Map<String, dynamic> pokemon,
+    Map<int?, List<Map<String, dynamic>>> evolutionsByParent,
+  ) {
+    List<Widget> widgets = [];
+    
+    // Add the current Pokemon
+    widgets.add(Center(child: _buildEvolutionStage(pokemon)));
+    
+    // Find evolutions that evolve from this Pokemon
+    final pokemonId = pokemon['id'] as int;
+    final evolutions = evolutionsByParent[pokemonId] ?? [];
+    
+    if (evolutions.isEmpty) {
+      // Check for forms
+      if (pokemon['forms'] != null && (pokemon['forms'] as List).isNotEmpty) {
+        widgets.addAll(_buildFormsList(pokemon['forms'] as List));
+      }
+      return widgets;
+    }
+    
+    // Add arrow
+    widgets.add(
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 15),
+        child: Icon(
+          Icons.arrow_downward,
+          color: Colors.white,
+          size: 30,
+        ),
+      ),
+    );
+    
+    if (evolutions.length == 1) {
+      // Single evolution - show trigger and continue chain
+      final evo = evolutions.first;
+      final trigger = evo['trigger'] as String?;
+      
+      if (trigger != null && trigger.isNotEmpty) {
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                trigger,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
                 ),
+              ),
+            ),
+          ),
+        );
+      }
+      
+      widgets.addAll(_buildEvolutionLevel(evo, evolutionsByParent));
+    } else {
+      // Multiple evolutions (branching) - show in a wrap/grid
+      widgets.add(
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 12,
+          runSpacing: 16,
+          children: evolutions.map((evo) {
+            final trigger = evo['trigger'] as String?;
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (trigger != null && trigger.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        trigger,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                _buildEvolutionStageCompact(evo),
+              ],
+            );
+          }).toList(),
+        ),
+      );
+    }
+    
+    return widgets;
+  }
+
+  Widget _buildEvolutionStageCompact(Map<String, dynamic> evolutionData) {
+    final name = evolutionData['name'] as String;
+    final id = evolutionData['id'] as int;
+
+    return GestureDetector(
+      onTap: () => _navigateToPokemon(id),
+      child: Container(
+        width: 100,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Image.network(
+              'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/$id.png',
+              width: 60,
+              height: 60,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  width: 60,
+                  height: 60,
+                  color: Colors.grey[300],
+                  child: const Icon(Icons.error, size: 20),
+                );
+              },
+            ),
+            const SizedBox(height: 4),
+            Text(
+              name[0].toUpperCase() + name.substring(1),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              '#${id.toString().padLeft(3, '0')}',
+              style: TextStyle(
+                fontSize: 10,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -182,8 +398,6 @@ class _EvolutionScreenState extends State<EvolutionScreen> {
   Widget _buildEvolutionStage(Map<String, dynamic> evolutionData) {
     final name = evolutionData['name'] as String;
     final id = evolutionData['id'] as int;
-    final minLevel = evolutionData['min_level'];
-    final trigger = evolutionData['trigger'] as String?;
 
     return GestureDetector(
       onTap: () => _navigateToPokemon(id),
@@ -205,62 +419,34 @@ class _EvolutionScreenState extends State<EvolutionScreen> {
         children: [
           Image.network(
             'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/$id.png',
-            width: 120,
-            height: 120,
+            width: 100,
+            height: 100,
             errorBuilder: (context, error, stackTrace) {
               return Container(
-                width: 120,
-                height: 120,
+                width: 100,
+                height: 100,
                 color: Colors.grey[300],
                 child: const Icon(Icons.error),
               );
             },
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Text(
             name[0].toUpperCase() + name.substring(1),
             style: TextStyle(
-              fontSize: 22,
+              fontSize: 20,
               fontWeight: FontWeight.bold,
               color: AppColors.textPrimary,
             ),
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 4),
           Text(
             '#${id.toString().padLeft(3, '0')}',
             style: TextStyle(
-              fontSize: 16,
+              fontSize: 14,
               color: AppColors.textSecondary,
             ),
           ),
-          if (minLevel != null) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: PokemonTypeColors.getColorByType(widget.pokemon.types[0]).withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                'Level $minLevel',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: PokemonTypeColors.getColorByType(widget.pokemon.types[0]),
-                ),
-              ),
-            ),
-          ],
-          if (trigger != null && trigger.isNotEmpty) ...[
-            const SizedBox(height: 5),
-            Text(
-              trigger[0].toUpperCase() + trigger.substring(1).replaceAll('-', ' '),
-              style: TextStyle(
-                fontSize: 12,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ],
         ],
         ),
       ),
@@ -278,37 +464,22 @@ class _EvolutionScreenState extends State<EvolutionScreen> {
     );
 
     try {
-      // Fetch Pokemon data
-      final QueryOptions options = QueryOptions(
-        document: gql(PokemonService.getPokemonsQuery),
-        variables: {
-          'limit': 1,
-          'offset': pokemonId - 1,
-        },
-      );
-
-      final QueryResult result = await PokemonService.client.value.query(options);
+      // Fetch Pokemon data using the service
+      final pokemon = await PokemonService.getPokemonById(pokemonId);
 
       if (mounted) {
         Navigator.pop(context); // Close loading dialog
 
-        if (!result.hasException && result.data != null) {
-          final List<dynamic> pokemonList =
-              result.data?['pokemon_v2_pokemon'] ?? [];
-
-          if (pokemonList.isNotEmpty) {
-            final pokemon = Pokemon.fromJson(pokemonList[0]);
-            
-            // Navigate to detail screen and remove all previous routes
-            // This ensures that pressing back goes to home
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(
-                builder: (context) => PokemonDetailScreen(pokemon: pokemon),
-              ),
-              (route) => route.isFirst, // Keep only the home screen
-            );
-          }
+        if (pokemon != null) {
+          // Navigate to detail screen and remove all previous routes
+          // This ensures that pressing back goes to home
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PokemonDetailScreen(pokemon: pokemon),
+            ),
+            (route) => route.isFirst, // Keep only the home screen
+          );
         }
       }
     } catch (e) {
@@ -332,57 +503,25 @@ class _EvolutionScreenState extends State<EvolutionScreen> {
     );
 
     try {
-      // Fetch Pokemon data by exact name
-      final QueryOptions options = QueryOptions(
-        document: gql(r'''
-          query GetPokemonByName($name: String!) {
-            pokemon_v2_pokemon(where: {name: {_eq: $name}}) {
-              id
-              name
-              height
-              weight
-              pokemon_v2_pokemontypes {
-                pokemon_v2_type {
-                  name
-                }
-              }
-              pokemon_v2_pokemonstats {
-                stat_id
-                base_stat
-              }
-            }
-          }
-        '''),
-        variables: {
-          'name': pokemonName,
-        },
-      );
-
-      final QueryResult result = await PokemonService.client.value.query(options);
+      // Fetch Pokemon data by exact name using the service
+      final pokemon = await PokemonService.getPokemonByName(pokemonName);
 
       if (mounted) {
         Navigator.pop(context); // Close loading dialog
 
-        if (!result.hasException && result.data != null) {
-          final List<dynamic> pokemonList =
-              result.data?['pokemon_v2_pokemon'] ?? [];
-
-          if (pokemonList.isNotEmpty) {
-            final pokemon = Pokemon.fromJson(pokemonList[0]);
-            
-            // Navigate to detail screen and remove all previous routes
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(
-                builder: (context) => PokemonDetailScreen(pokemon: pokemon),
-              ),
-              (route) => route.isFirst, // Keep only the home screen
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Pokemon form not found')),
-            );
-          }
+        if (pokemon != null) {
+          // Navigate to detail screen and remove all previous routes
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PokemonDetailScreen(pokemon: pokemon),
+            ),
+            (route) => route.isFirst, // Keep only the home screen
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Pokemon form not found')),
+          );
         }
       }
     } catch (e) {
