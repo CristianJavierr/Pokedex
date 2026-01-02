@@ -568,7 +568,7 @@ class _MapScreenState extends State<MapScreen> {
                             ),
                           ),
                           
-                          // Location markers - only render when map is ready and constraints are valid
+                          // Location markers solo renderiza cuando hay un tamaño válido del mapa
                           if (hasValidSize && _isMapReady)
                           ..._currentRegionData.locations.map((location) {
                             final isSelected = _selectedLocation == location;
@@ -799,6 +799,7 @@ class _MapScreenState extends State<MapScreen> {
                             color: Colors.white.withOpacity(0.2),
                           ),
                         ),
+                        // this secction shows the pokemon sprite and id
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
