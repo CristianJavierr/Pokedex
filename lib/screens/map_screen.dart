@@ -13,7 +13,8 @@ class MapLocation {
   final double y;
   final Color color;
   final bool isCity;
-  final List<int> pokemonIds;
+  final String? apiLocationName; // Name to search in API
+  final List<int> fallbackPokemonIds; // Fallback if API fails
 
   const MapLocation({
     required this.nameEn,
@@ -22,7 +23,8 @@ class MapLocation {
     required this.y,
     required this.color,
     this.isCity = true,
-    this.pokemonIds = const [],
+    this.apiLocationName,
+    this.fallbackPokemonIds = const [],
   });
 
   String getName(int languageId) => languageId == 7 ? nameEs : nameEn;
@@ -63,6 +65,8 @@ class _MapScreenState extends State<MapScreen> {
   MapLocation? _selectedLocation;
   Region _currentRegion = Region.kanto;
   bool _isMapReady = false;
+  List<int> _currentPokemonIds = [];
+  bool _isLoadingPokemon = false;
 
   @override
   void initState() {
@@ -94,9 +98,8 @@ class _MapScreenState extends State<MapScreen> {
     ),
   };
 
-  // =====================
+
   // KANTO LOCATIONS
-  // =====================
   static const List<MapLocation> _kantoLocations = [
     MapLocation(
       nameEn: 'Pallet Town',
@@ -104,7 +107,8 @@ class _MapScreenState extends State<MapScreen> {
       x: 0.225,
       y: 0.67,
       color: Color(0xFFFFFFFF),
-      pokemonIds: [16, 19, 21, 29, 32],
+      apiLocationName: 'pallet-town',
+      fallbackPokemonIds: [16, 19, 21, 29, 32],
     ),
     MapLocation(
       nameEn: 'Viridian City',
@@ -112,7 +116,8 @@ class _MapScreenState extends State<MapScreen> {
       x: 0.225,
       y: 0.50,
       color: Color(0xFF7FFFD4),
-      pokemonIds: [16, 19, 21, 56, 84],
+      apiLocationName: 'viridian-city',
+      fallbackPokemonIds: [16, 19, 21, 56, 84],
     ),
     MapLocation(
       nameEn: 'Viridian Forest',
@@ -121,7 +126,8 @@ class _MapScreenState extends State<MapScreen> {
       y: 0.28,
       color: Color(0xFF228B22),
       isCity: false,
-      pokemonIds: [10, 11, 13, 14, 25],
+      apiLocationName: 'viridian-forest',
+      fallbackPokemonIds: [10, 11, 13, 14, 25],
     ),
     MapLocation(
       nameEn: 'Pewter City',
@@ -129,7 +135,8 @@ class _MapScreenState extends State<MapScreen> {
       x: 0.225,
       y: 0.20,
       color: Color(0xFF808080),
-      pokemonIds: [74, 95],
+      apiLocationName: 'pewter-city',
+      fallbackPokemonIds: [74, 95],
     ),
     MapLocation(
       nameEn: 'Mt. Moon',
@@ -138,7 +145,8 @@ class _MapScreenState extends State<MapScreen> {
       y: 0.165,
       color: Color(0xFF483D8B),
       isCity: false,
-      pokemonIds: [35, 41, 46, 74],
+      apiLocationName: 'mt-moon',
+      fallbackPokemonIds: [35, 41, 46, 74],
     ),
     MapLocation(
       nameEn: 'Cerulean City',
@@ -146,7 +154,8 @@ class _MapScreenState extends State<MapScreen> {
       x: 0.625,
       y: 0.165,
       color: Color(0xFF4169E1),
-      pokemonIds: [54, 60, 118, 120],
+      apiLocationName: 'cerulean-city',
+      fallbackPokemonIds: [54, 60, 118, 120],
     ),
     MapLocation(
       nameEn: 'Rock Tunnel',
@@ -155,7 +164,8 @@ class _MapScreenState extends State<MapScreen> {
       y: 0.22,
       color: Color(0xFF8B4513),
       isCity: false,
-      pokemonIds: [41, 66, 74, 95],
+      apiLocationName: 'rock-tunnel',
+      fallbackPokemonIds: [41, 66, 74, 95],
     ),
     MapLocation(
       nameEn: 'Vermilion City',
@@ -163,7 +173,8 @@ class _MapScreenState extends State<MapScreen> {
       x: 0.625,
       y: 0.555,
       color: Color(0xFFFF6347),
-      pokemonIds: [25, 26, 81, 82, 100],
+      apiLocationName: 'vermilion-city',
+      fallbackPokemonIds: [25, 26, 81, 82, 100],
     ),
     MapLocation(
       nameEn: 'Lavender Town',
@@ -171,7 +182,8 @@ class _MapScreenState extends State<MapScreen> {
       x: 0.825,
       y: 0.335,
       color: Color(0xFFE6E6FA),
-      pokemonIds: [92, 93, 104],
+      apiLocationName: 'pokemon-tower',
+      fallbackPokemonIds: [92, 93, 104],
     ),
     MapLocation(
       nameEn: 'Celadon City',
@@ -179,7 +191,8 @@ class _MapScreenState extends State<MapScreen> {
       x: 0.475,
       y: 0.335,
       color: Color(0xFF8FBC8F),
-      pokemonIds: [43, 44, 69, 70, 102, 133],
+      apiLocationName: 'celadon-city',
+      fallbackPokemonIds: [43, 44, 69, 70, 102, 133],
     ),
     MapLocation(
       nameEn: 'Fuchsia City',
@@ -187,7 +200,8 @@ class _MapScreenState extends State<MapScreen> {
       x: 0.525,
       y: 0.78,
       color: Color(0xFFFF00FF),
-      pokemonIds: [48, 88, 109, 114, 123, 127],
+      apiLocationName: 'fuchsia-city',
+      fallbackPokemonIds: [48, 88, 109, 114, 123, 127],
     ),
     MapLocation(
       nameEn: 'Saffron City',
@@ -195,7 +209,8 @@ class _MapScreenState extends State<MapScreen> {
       x: 0.625,
       y: 0.335,
       color: Color(0xFFFFD700),
-      pokemonIds: [63, 64, 65, 122],
+      apiLocationName: 'saffron-city',
+      fallbackPokemonIds: [63, 64, 65, 122],
     ),
     MapLocation(
       nameEn: 'Seafoam Islands',
@@ -204,7 +219,8 @@ class _MapScreenState extends State<MapScreen> {
       y: 0.88,
       color: Color(0xFF00CED1),
       isCity: false,
-      pokemonIds: [86, 87, 90, 116, 117, 144],
+      apiLocationName: 'seafoam-islands',
+      fallbackPokemonIds: [86, 87, 90, 116, 117, 144],
     ),
     MapLocation(
       nameEn: 'Cinnabar Island',
@@ -212,7 +228,8 @@ class _MapScreenState extends State<MapScreen> {
       x: 0.225,
       y: 0.88,
       color: Color(0xFFFF4500),
-      pokemonIds: [58, 77, 126, 137, 138, 140, 142],
+      apiLocationName: 'cinnabar-island',
+      fallbackPokemonIds: [58, 77, 126, 137, 138, 140, 142],
     ),
     MapLocation(
       nameEn: 'Victory Road',
@@ -221,7 +238,8 @@ class _MapScreenState extends State<MapScreen> {
       y: 0.28,
       color: Color(0xFF9932CC),
       isCity: false,
-      pokemonIds: [66, 67, 95, 105, 112],
+      apiLocationName: 'victory-road',
+      fallbackPokemonIds: [66, 67, 95, 105, 112],
     ),
     MapLocation(
       nameEn: 'Indigo Plateau',
@@ -229,13 +247,12 @@ class _MapScreenState extends State<MapScreen> {
       x: 0.125,
       y: 0.175,
       color: Color(0xFF4B0082),
-      pokemonIds: [],
+      apiLocationName: 'indigo-plateau',
+      fallbackPokemonIds: [],
     ),
   ];
 
-  // =====================
   // JOHTO LOCATIONS
-  // =====================
   static const List<MapLocation> _johtoLocations = [
     MapLocation(
       nameEn: 'New Bark Town',
@@ -243,23 +260,26 @@ class _MapScreenState extends State<MapScreen> {
       x: 0.875,
       y: 0.52,
       color: Color(0xFFFFFFFF),
-      pokemonIds: [152, 155, 158], // Starters
+      apiLocationName: 'new-bark-town',
+      fallbackPokemonIds: [152, 155, 158],
     ),
     MapLocation(
       nameEn: 'Cherrygrove City',
       nameEs: 'Ciudad Cerezo',
       x: 0.72,
       y: 0.52,
-      color: Color(0xFFFFB6C1), // Light pink
-      pokemonIds: [161, 163, 165, 167], // Sentret, Hoothoot, Ledyba, Spinarak
+      color: Color(0xFFFFB6C1),
+      apiLocationName: 'cherrygrove-city',
+      fallbackPokemonIds: [161, 163, 165, 167],
     ),
     MapLocation(
       nameEn: 'Violet City',
       nameEs: 'Ciudad Malva',
       x: 0.72,
       y: 0.28,
-      color: Color(0xFF8A2BE2), // Blue violet
-      pokemonIds: [16, 17, 21, 22], // Pidgey, Pidgeotto, Spearow, Fearow
+      color: Color(0xFF8A2BE2),
+      apiLocationName: 'violet-city',
+      fallbackPokemonIds: [16, 17, 21, 22],
     ),
     MapLocation(
       nameEn: 'Azalea Town',
@@ -267,109 +287,122 @@ class _MapScreenState extends State<MapScreen> {
       x: 0.42,
       y: 0.52,
       color: Color(0xFFFFFFFF),
-      pokemonIds: [10, 11, 14, 15], // Caterpie, Metapod, Kakuna, Beedrill
+      apiLocationName: 'azalea-town',
+      fallbackPokemonIds: [10, 11, 14, 15],
     ),
     MapLocation(
       nameEn: 'Goldenrod City',
       nameEs: 'Ciudad Trigal',
       x: 0.42,
       y: 0.28,
-      color: Color(0xFFFFD700), // Gold
-      pokemonIds: [35, 173, 175, 122], // Clefairy, Cleffa, Togepi, Mr. Mime
+      color: Color(0xFFFFD700),
+      apiLocationName: 'goldenrod-city',
+      fallbackPokemonIds: [35, 173, 175, 122],
     ),
     MapLocation(
       nameEn: 'Ecruteak City',
       nameEs: 'Ciudad Iris',
       x: 0.42,
       y: 0.12,
-      color: Color(0xFF9370DB), // Medium purple
-      pokemonIds: [92, 93, 200], // Gastly, Haunter, Misdreavus
+      color: Color(0xFF9370DB),
+      apiLocationName: 'ecruteak-city',
+      fallbackPokemonIds: [92, 93, 200],
     ),
     MapLocation(
       nameEn: 'Olivine City',
       nameEs: 'Ciudad Olivo',
       x: 0.18,
       y: 0.38,
-      color: Color(0xFFC0C0C0), // Silver
-      pokemonIds: [81, 82, 227], // Magnemite, Magneton, Skarmory
+      color: Color(0xFFC0C0C0),
+      apiLocationName: 'olivine-city',
+      fallbackPokemonIds: [81, 82, 227],
     ),
     MapLocation(
       nameEn: 'Cianwood City',
       nameEs: 'Ciudad Caña',
       x: 0.10,
       y: 0.72,
-      color: Color(0xFFDEB887), // Burlywood
-      pokemonIds: [66, 67, 236], // Machop, Machoke, Tyrogue
+      color: Color(0xFFDEB887),
+      apiLocationName: 'cianwood-city',
+      fallbackPokemonIds: [66, 67, 236],
     ),
     MapLocation(
       nameEn: 'Mahogany Town',
       nameEs: 'Pueblo Caoba',
       x: 0.72,
       y: 0.12,
-      color: Color(0xFF8B4513), // Saddle brown
-      pokemonIds: [86, 87, 220, 221], // Seel, Dewgong, Swinub, Piloswine
+      color: Color(0xFF8B4513),
+      apiLocationName: 'mahogany-town',
+      fallbackPokemonIds: [86, 87, 220, 221],
     ),
     MapLocation(
       nameEn: 'Blackthorn City',
       nameEs: 'Ciudad Endrino',
       x: 0.875,
       y: 0.12,
-      color: Color(0xFF2F4F4F), // Dark slate gray
-      pokemonIds: [147, 148, 149], // Dratini, Dragonair, Dragonite
+      color: Color(0xFF2F4F4F),
+      apiLocationName: 'blackthorn-city',
+      fallbackPokemonIds: [147, 148, 149],
     ),
     MapLocation(
       nameEn: 'Lake of Rage',
       nameEs: 'Lago de la Furia',
       x: 0.72,
       y: 0.04,
-      color: Color(0xFFDC143C), // Crimson
+      color: Color(0xFFDC143C),
       isCity: false,
-      pokemonIds: [129, 130], // Magikarp, Gyarados (Red Gyarados!)
+      apiLocationName: 'lake-of-rage',
+      fallbackPokemonIds: [129, 130],
     ),
     MapLocation(
       nameEn: 'Ilex Forest',
       nameEs: 'Bosque Azalea',
       x: 0.52,
       y: 0.52,
-      color: Color(0xFF228B22), // Forest green
+      color: Color(0xFF228B22),
       isCity: false,
-      pokemonIds: [43, 44, 46, 47, 48], // Oddish, Gloom, Paras, Parasect, Venonat
+      apiLocationName: 'ilex-forest',
+      fallbackPokemonIds: [43, 44, 46, 47, 48],
     ),
     MapLocation(
       nameEn: 'National Park',
       nameEs: 'Parque Nacional',
       x: 0.52,
       y: 0.18,
-      color: Color(0xFF32CD32), // Lime green
+      color: Color(0xFF32CD32),
       isCity: false,
-      pokemonIds: [10, 11, 123, 127, 204], // Bug Contest: Caterpie, Metapod, Scyther, Pinsir, Pineco
+      apiLocationName: 'national-park',
+      fallbackPokemonIds: [10, 11, 123, 127, 204],
     ),
     MapLocation(
       nameEn: 'Bell Tower',
       nameEs: 'Torre Campana',
       x: 0.35,
       y: 0.08,
-      color: Color(0xFFFFD700), // Gold
+      color: Color(0xFFFFD700),
       isCity: false,
-      pokemonIds: [250], // Ho-Oh
+      apiLocationName: 'bell-tower',
+      fallbackPokemonIds: [250], 
     ),
     MapLocation(
       nameEn: 'Whirl Islands',
       nameEs: 'Islas Remolino',
       x: 0.18,
       y: 0.58,
-      color: Color(0xFF4169E1), // Royal blue
+      color: Color(0xFF4169E1),
       isCity: false,
-      pokemonIds: [86, 87, 116, 117, 249], // Seel, Dewgong, Horsea, Seadra, Lugia
+      apiLocationName: 'whirl-islands',
+      fallbackPokemonIds: [86, 87, 116, 117, 249],
     ),
     MapLocation(
       nameEn: 'Mt. Silver',
       nameEs: 'Monte Plateado',
       x: 0.95,
       y: 0.28,
-      color: Color(0xFFC0C0C0), // Silver
+      color: Color(0xFFC0C0C0),
       isCity: false,
-      pokemonIds: [215, 217, 231, 246], // Sneasel, Ursaring, Phanpy, Larvitar
+      apiLocationName: 'mt-silver',
+      fallbackPokemonIds: [215, 217, 231, 246],
     ),
   ];
 
@@ -699,7 +732,44 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ],
             ),
-            if (location.pokemonIds.isNotEmpty) ...[
+            if (_isLoadingPokemon) ...[
+              const SizedBox(height: 16),
+              Text(
+                SettingsService.tr('pokemonFound'),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.white.withOpacity(0.8),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 80,
+                child: Center(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white.withOpacity(0.7),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        languageId == 7 ? 'Cargando Pokémon...' : 'Loading Pokémon...',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white.withOpacity(0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ] else if (_currentPokemonIds.isNotEmpty) ...[
               const SizedBox(height: 16),
               Text(
                 SettingsService.tr('pokemonFound'),
@@ -714,9 +784,9 @@ class _MapScreenState extends State<MapScreen> {
                 height: 80,
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
-                  itemCount: location.pokemonIds.length,
+                  itemCount: _currentPokemonIds.length,
                   itemBuilder: (context, index) {
-                    final pokemonId = location.pokemonIds[index];
+                    final pokemonId = _currentPokemonIds[index];
                     return GestureDetector(
                       onTap: () => _navigateToPokemon(pokemonId),
                       child: Container(
@@ -785,10 +855,25 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  void _onLocationTap(MapLocation location) {
+  void _onLocationTap(MapLocation location) async {
     setState(() {
       _selectedLocation = location;
+      _isLoadingPokemon = true;
+      _currentPokemonIds = [];
     });
+
+    // Load Pokémon from API
+    List<int> ids = [];
+    if (location.apiLocationName != null && location.apiLocationName!.isNotEmpty) {
+      ids = await PokemonService.getPokemonIdsByLocation(location.apiLocationName!);
+    }
+
+    if (mounted) {
+      setState(() {
+        _currentPokemonIds = ids.isNotEmpty ? ids : location.fallbackPokemonIds;
+        _isLoadingPokemon = false;
+      });
+    }
   }
 
   void _navigateToPokemon(int pokemonId) async {

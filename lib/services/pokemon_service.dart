@@ -15,10 +15,6 @@ class PokemonService {
     ),
   );
 
-  // ============================================
-  // QUERIES (GraphQL strings)
-  // ============================================
-
   static const String _pokemonsQuery = r'''
     query GetPokemons($limit: Int!, $offset: Int!) {
       pokemon_v2_pokemon(
@@ -63,10 +59,6 @@ class PokemonService {
       }
     }
   ''';
-
-  // ============================================
-  // SERVICE METHODS (Return DTOs)
-  // ============================================
 
   /// Fetch paginated list of Pokemon
   static Future<List<PokemonDTO>> getPokemons({
@@ -324,10 +316,6 @@ class PokemonService {
       return null;
     }
   }
-
-  // ============================================
-  // DESCRIPTION & OTHER QUERIES
-  // ============================================
 
   static String getPokemonDescriptionQuery(int languageId) {
     return '''
@@ -715,6 +703,64 @@ class PokemonService {
       }
     }
   ''';
+
+  static const String getPokemonByLocationQuery = r'''
+    query GetPokemonByLocation($locationName: String!) {
+      pokemon_v2_location(where: {name: {_ilike: $locationName}}) {
+        id
+        name
+        pokemon_v2_locationareas {
+          pokemon_v2_encounters(distinct_on: pokemon_id) {
+            pokemon_id
+          }
+        }
+      }
+    }
+  ''';
+
+  static Future<List<int>> getPokemonIdsByLocation(String locationName) async {
+    try {
+      final QueryOptions options = QueryOptions(
+        document: gql(getPokemonByLocationQuery),
+        variables: {'locationName': '%$locationName%'},
+        fetchPolicy: FetchPolicy.cacheFirst,
+      );
+
+      final QueryResult result = await client.value.query(options);
+
+      if (result.hasException) {
+        print('Error fetching pokemon by location: ${result.exception}');
+        return [];
+      }
+
+      final locations = result.data?['pokemon_v2_location'] as List?;
+      if (locations == null || locations.isEmpty) return [];
+
+      Set<int> pokemonIds = {};
+      for (var location in locations) {
+        final areas = location['pokemon_v2_locationareas'] as List?;
+        if (areas != null) {
+          for (var area in areas) {
+            final encounters = area['pokemon_v2_encounters'] as List?;
+            if (encounters != null) {
+              for (var encounter in encounters) {
+                final pokemonId = encounter['pokemon_id'] as int?;
+                if (pokemonId != null && pokemonId <= 251) {
+                  pokemonIds.add(pokemonId);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      final sortedIds = pokemonIds.toList()..sort();
+      return sortedIds.take(10).toList();
+    } catch (e) {
+      print('Exception fetching pokemon by location: $e');
+      return [];
+    }
+  }
 
   static Future<List<Map<String, dynamic>>> getEvolutionChain(int pokemonId) async {
     try {
